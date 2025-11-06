@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>MS2LAMMPS</title>
+    <script src="https://webperlcdn.zero-g.net/v0.09-beta/webperl.js"></script>
+    <style>
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background-color: #f4f6fa;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+    
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #4a69bd);
+            color: #fff;
+            text-align: center;
+            padding: 5px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+    
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            letter-spacing: 1px;
+        }
+    
+        .container {
+            width: 85%;
+            max-width: 900px;
+            margin: 30px auto;
+        }
+    
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px 30px;
+            margin-bottom: 20px;
+        }
+    
+        label {
+            display: inline-block;
+            width: 80px;
+            font-weight: bold;
+        }
+    
+        input[type="file"] {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 6px;
+            width: 220px;
+            background-color: #fafafa;
+            transition: all 0.2s ease;
+        }
+    
+        input[type="file"]:hover {
+            background-color: #f0f0f0;
+        }
+    
+        #stderr {
+            width: 100%;
+            height: 220px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            color: #0f0;
+            font-family: monospace;
+            padding: 10px;
+            overflow: auto;
+            box-sizing: border-box;
+        }
+    
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+        }
+    
+        input[type="button"] {
+            width: 160px;
+            padding: 10px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #fff;
+        }
+    
+        #run_perl {
+            background-color: #007bff;
+        }
+    
+        #run_perl:hover {
+            background-color: #0056b3;
+        }
+    
+        #downlaod {
+            background-color: #28a745;
+        }
+    
+        #downlaod:hover {
+            background-color: #1c7e31;
+        }
+    
+        .footer {
+            background-color: #2c3e50;
+            color: #ddd;
+            text-align: center;
+            padding: 15px 0;
+            margin-top: 30px;
+            font-size: 0.9rem;
+        }
+    
+        .footer p {
+            margin: 0;
+        }
+    </style>
+    <script>
+        var $ = function (id) { return document.getElementById(id); };
+
+        function extension(t) { return t.substring(t.lastIndexOf(".") + 1).toLowerCase(); }
+
+        function basename(t) { return t.replace(/\.[^.]+$/, '') }
+    </script>
+</head>
+
+<body>
+    <!-- 头部区域 -->
+    <div class="header">
+        <div class="container">
+            <h1>Material Studio to LAMMPS data</h1>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="main-content">
+            <div>
+                <label for="loadms">.car/.mdf</label>
+                <input type="file" id="loadms" title="选择Material Studio导出的对应分子结构和成键信息文件" accept=".car, .mdf" multiple style="width: 200px;">
+            </div>
+            <div>
+                <label for="loadfrc">.frc</label>
+                <input type="file" id="loadfrc" title="选择BIOSYM格式的frc力场参数文件" accept=".frc" style="width: 200px;">
+            </div>
+            <div>
+                <label for="loadperl">.pl</label>
+                <input type="file" id="loadperl" title='选择需要运行的perl脚本，典型的就是insight2lammps.pl' accept=".pl" style="width: 200px;">
+            </div>
+        </div>
+
+        <div class="main-content">
+            <textarea id="perltxt" hidden style="width: 400px; height: 200px;"></textarea>
+            <label for="stderr">stderr:</label>
+            <div id="stderr" title="输出程序正常运行状态或者报错信息" style="width: 400px; height: 200px; overflow:auto;"></div>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+            <input type="button" id="run_perl" value="开始转换" style="width: 150px;">
+            <input type="button" id="downlaod" value="下载data" style="width: 150px;">
+        </div>
+    </div>
+
+    <!-- 页脚区域 -->
+    <div class="footer">
+        <div class="container">
+            <p>&copy; 2025年11月</p>
+        </div>
+    </div>
+</body>
+
+<script>
+    window.addEventListener("load", function () {
+        $('stderr').appendChild(Perl.makeOutputTextarea());
+        $('run_perl').disabled = true;
+    });
+
+    var g_fbase = '';
+
+    Perl.init(function () {
+        // 载入 .car + .mdf 文件
+        $('loadms').addEventListener('change', async function () {
+            const files = this.files;
+            if (files.length !== 2) {
+                alert('错误! 必须同时选择.car和.mdf文件');
+                this.value = '';
+                return;
+            }
+
+            // tow files must be same basename
+            let car = '', mdf = '';
+            for (const file of files) {
+                if (extension(file.name) === 'car') {
+                    car = basename(file.name);
+                } else if (extension(file.name) === 'mdf') {
+                    mdf = basename(file.name);
+                } else {
+                    alert('错误! 文件名后缀必须为 .car 或 .mdf');
+                    this.value = '';
+                    return;
+                }
+            }
+            if (car !== mdf) {
+                alert('错误! 文件名前缀必须相同');
+                this.value = '';
+                return;
+            }
+
+            // write file to FS
+            for (const file of files) { 
+                const text = await file.text();
+                FS.writeFile(file.name, text);
+            }
+        });
+
+        // 载入单个 .frc 文件
+        $('loadfrc').addEventListener('change', async function () {
+            const files = this.files;
+            if (files.length !== 1) {
+                alert('错误! 必须选择一个 .frc 文件');
+                this.value = '';
+                return;
+            }
+
+            const file = files[0];
+            if (extension(file.name) !== 'frc') {
+                alert('错误! 力场名后缀必须为 .frc');
+                this.value = '';
+                return;
+            }
+
+            // write file to FS
+            const text = await file.text();
+            FS.writeFile(file.name, text);
+        });
+
+        // download context text to f file
+        $('downlaod').addEventListener('click', async function () {
+            if (!g_fbase) return;
+            const fname = g_fbase+'.data';
+            const context = FS.readFile(fname);
+            if (!context) { 
+                alert('错误：未找到文件 ' + fname);
+                return; 
+            }
+            let h;
+            if ('function'==typeof window.Blob) {
+                h = new Blob([context], {type: "text/plain;charset=utf-8"});
+            } else {
+                let w = window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder || window.MSBlobBuilder;
+                let d = new w; d.append(context);
+                h = d.getBlob("text/plain;charset=utf-8");
+            }
+            let c = window.URL || window.webkitURL, v = c.createObjectURL(h);
+            
+            let p = document.createElement("a");
+            const f = fname;
+            if ('download' in p) {
+                p.style.visibility = "hidden";
+                p.href = v;
+                p.download = f;
+                document.body.appendChild(p);
+                let M = document.createEvent("MouseEvents");
+                M.initEvent("click", !0, !0);
+                p.dispatchEvent(M);
+                document.body.removeChild(p);
+            }
+            else {
+                // IE或者浏览器查看文本
+                navigator.msSaveBlob? navigator.msSaveBlob(h, f) : location.href = v;
+            }
+        });
+    });
+
+    $('loadperl').addEventListener('change', function () {
+        const file = this.files[0];
+        r = new FileReader();
+        r.onload = function () {
+            $('perltxt').value = r.result;
+            $('run_perl').disabled = false;
+        };
+        r.readAsText(file);
+    });
+
+    $('run_perl').addEventListener('click', async function () {
+        const perl_code_text = $('perltxt').value || '';
+        if (!perl_code_text) { 
+            alert('错误：未提供 perl 脚本（请选择 .pl 文件）'); 
+            return; 
+        }
+
+        // 自动从选中的文件构造 argv（可以按需修改）
+        const args = [];
+        const msFiles = $('loadms').files;
+        if (msFiles && msFiles.length === 2) { 
+            g_fbase = basename(msFiles[0].name);
+            args.push(g_fbase); 
+        } else { 
+            alert('错误! 缺失car和mdf文件'); 
+            return; 
+        }
+
+        const frcFiles = $('loadfrc').files;
+        let ffname = '';
+        if (frcFiles && frcFiles.length === 1) {
+            // such as compass.frc
+            ffname = basename(frcFiles[0].name);
+        } else { 
+            alert('错误! 缺失.frc文件'); 
+            return; 
+        }
+        
+        args.push(g_fbase, '-forcefield='+ffname, '-selection='+ffname); 
+
+        // 清空输出区
+        $('stderr').querySelector('textarea').value = 'Running...\n' +  "perl " + $('loadperl').value + " " + args.join(' ') + '\n';
+
+        // 准备要 eval 的完整代码：先设置 $|=1，再设置 @ARGV，然后是你的脚本
+        const safeArgs = args.map(a => "'" + a.replace(/'/g, "\\'") + "'").join(',');
+        const codeToRun = "$|=1;\n@ARGV = (" + safeArgs + ");\n" + perl_code_text;
+        console.log('safeArgs:', safeArgs);
+
+        // Helper: 启动解释器（不传参数）并在启动完成后 eval codeToRun
+        function startAndRun() {
+            // 启动解释器但不要传数组作为脚本名（这里传 [] 或者不传）
+            try {
+                Perl.start([]);
+            } catch (e) {
+                console.warn('Perl.start threw', e);
+            }
+            // 小延迟，确保解释器进入 Running，然后 eval
+            setTimeout(() => { 
+                Perl.eval(codeToRun);  
+                $('run_perl').disabled = true;
+            }, 60);
+        }
+
+        // 根据当前状态决定怎么做（关键：绝不要在 Running 状态下再次调用 start(args)）
+        if (Perl.state === "Uninitialized") {
+            // init 完成后再启动
+            Perl.init(function () {
+                setTimeout(startAndRun, 5);
+            });
+            return;
+        }
+
+        if (Perl.state === "Ready" || Perl.state === "Ended") {
+            // 从 Ready/Ended 启动时也不要传脚本名作为第一个参数
+            // （如果是 Ended，先切回 Ready）
+            if (Perl.state === "Ended") {
+                try { Perl.changeState("Ready"); } catch (e) { console.warn(e); }
+                setTimeout(startAndRun, 30);
+            } else {
+                startAndRun();
+            }
+            return;
+        }
+
+        if (Perl.state === "Running") {
+            // 解释器已运行：直接在当前环境中设置 @ARGV 并执行（不用 start）
+            Perl.eval(codeToRun);
+            return;
+        }
+
+        // 兜底：尝试重启然后运行
+        try {
+            Perl.changeState("Ended");
+        } catch (e) { }
+        setTimeout(() => {
+            try { Perl.changeState("Ready"); } catch (e) { }
+            setTimeout(startAndRun, 50);
+        }, 50);
+    });
+</script>
+
+</html>
