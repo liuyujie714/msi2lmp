@@ -314,7 +314,7 @@
             return; 
         }
         
-        args.push(g_fbase, '-forcefield='+ffname, '-selection='+ffname); 
+        args.push('-forcefield='+ffname, '-selection='+ffname); 
 
         // 清空输出区
         $('stderr').querySelector('textarea').value = 'Running...\n' +  "perl " + $('loadperl').value + " " + args.join(' ') + '\n';
