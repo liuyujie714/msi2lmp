@@ -88,23 +88,14 @@
             font-size: 1rem;
             cursor: pointer;
             transition: all 0.3s ease;
-            color: #fff;
         }
     
         #run_perl {
             background-color: #007bff;
         }
     
-        #run_perl:hover {
-            background-color: #0056b3;
-        }
-    
         #downlaod {
             background-color: #28a745;
-        }
-    
-        #downlaod:hover {
-            background-color: #1c7e31;
         }
     
         .footer {
@@ -133,7 +124,7 @@
     <!-- 头部区域 -->
     <div class="header">
         <div class="container">
-            <h1>Material Studio to LAMMPS data</h1>
+            <h1>Materials Studio to LAMMPS data</h1>
         </div>
     </div>
 
@@ -141,7 +132,7 @@
         <div class="main-content">
             <div>
                 <label for="loadms">.car/.mdf</label>
-                <input type="file" id="loadms" title="选择Material Studio导出的对应分子结构和成键信息文件" accept=".car, .mdf" multiple style="width: 200px;">
+                <input type="file" id="loadms" title="选择Materials Studio导出的对应分子结构和成键信息文件" accept=".car, .mdf" multiple style="width: 200px;">
             </div>
             <div>
                 <label for="loadfrc">.frc</label>
@@ -160,7 +151,7 @@
         </div>
 
         <div style="display:flex; gap:10px;">
-            <input type="button" id="run_perl" value="开始转换" style="width: 150px;">
+            <input type="button" id="run_perl" value="开始转换" style="width: 150px; margin-left: 50px;">
             <input type="button" id="downlaod" value="下载data" style="width: 150px;">
         </div>
     </div>
@@ -240,44 +231,56 @@
 
         // download context text to f file
         $('downlaod').addEventListener('click', async function () {
-            if (!g_fbase) return;
+            if (!g_fbase) {
+                return;
+            }
             const fname = g_fbase+'.data';
-            const context = FS.readFile(fname);
-            if (!context) { 
-                alert('错误：未找到文件 ' + fname);
-                return; 
-            }
-            let h;
-            if ('function'==typeof window.Blob) {
-                h = new Blob([context], {type: "text/plain;charset=utf-8"});
-            } else {
-                let w = window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder || window.MSBlobBuilder;
-                let d = new w; d.append(context);
-                h = d.getBlob("text/plain;charset=utf-8");
-            }
-            let c = window.URL || window.webkitURL, v = c.createObjectURL(h);
-            
-            let p = document.createElement("a");
-            const f = fname;
-            if ('download' in p) {
-                p.style.visibility = "hidden";
-                p.href = v;
-                p.download = f;
-                document.body.appendChild(p);
-                let M = document.createEvent("MouseEvents");
-                M.initEvent("click", !0, !0);
-                p.dispatchEvent(M);
-                document.body.removeChild(p);
-            }
-            else {
-                // IE或者浏览器查看文本
-                navigator.msSaveBlob? navigator.msSaveBlob(h, f) : location.href = v;
+            try {
+                const context = FS.readFile(fname);
+                if (!context) { 
+                    alert('错误! 未找到文件 ' + fname);
+                    return; 
+                }
+                let h;
+                if ('function'==typeof window.Blob) {
+                    h = new Blob([context], {type: "text/plain;charset=utf-8"});
+                } else {
+                    let w = window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder || window.MSBlobBuilder;
+                    let d = new w; d.append(context);
+                    h = d.getBlob("text/plain;charset=utf-8");
+                }
+                let c = window.URL || window.webkitURL, v = c.createObjectURL(h);
+                
+                let p = document.createElement("a");
+                const f = fname;
+                if ('download' in p) {
+                    p.style.visibility = "hidden";
+                    p.href = v;
+                    p.download = f;
+                    document.body.appendChild(p);
+                    let M = document.createEvent("MouseEvents");
+                    M.initEvent("click", !0, !0);
+                    p.dispatchEvent(M);
+                    document.body.removeChild(p);
+                }
+                else {
+                    // IE或者浏览器查看文本
+                    navigator.msSaveBlob? navigator.msSaveBlob(h, f) : location.href = v;
+                }
+            } catch (e) {
+                alert('错误！任务失败，无法下载文件 ' + fname);
             }
         });
+
     });
 
     $('loadperl').addEventListener('change', function () {
         const file = this.files[0];
+        if (extension(file.name) != 'pl') {
+            alert('错误! 脚本名后缀必须为 .pl');
+            this.value = '';
+            return;
+        }
         r = new FileReader();
         r.onload = function () {
             $('perltxt').value = r.result;
@@ -286,8 +289,8 @@
         r.readAsText(file);
     });
 
-    $('run_perl').addEventListener('click', async function () {
-        const perl_code_text = $('perltxt').value || '';
+    $('run_perl').addEventListener('click', function () {
+        const perl_code_text = $('perltxt').value;
         if (!perl_code_text) { 
             alert('错误：未提供 perl 脚本（请选择 .pl 文件）'); 
             return; 
